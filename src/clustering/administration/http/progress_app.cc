@@ -30,9 +30,9 @@ public:
     scoped_ptr_t<promise_t<std::pair<int, int> > > promise;
     scoped_ptr_t<mailbox_t<void(std::pair<int, int>)> > resp_mbox;
 
-    // TODO: We take ownership of these pointers?  Look at users.
-    request_record_t(promise_t<std::pair<int, int> > *_promise, mailbox_t<void(std::pair<int, int>)> *_resp_mbox)
-        : promise(_promise), resp_mbox(_resp_mbox)
+    request_record_t(scoped_ptr_t<promise_t<std::pair<int, int> > > _promise,
+                     scoped_ptr_t<mailbox_t<void(std::pair<int, int>)> > _resp_mbox)
+        : promise(std::move(_promise)), resp_mbox(std::move(_resp_mbox))
     { }
 };
 
@@ -150,14 +150,16 @@ void send_backfill_requests_t::handle_request_internal(const reactor_business_ca
 
     boost::optional<backfiller_business_card_t> backfiller = boost::apply_visitor(get_backfiller_business_card_t(), region_activity_entry.activity);
     if (backfiller) {
-        promise_t<std::pair<int, int> > *value = new promise_t<std::pair<int, int> >;
-        mailbox_t<void(std::pair<int, int>)> *resp_mbox = new mailbox_t<void(std::pair<int, int>)>(
-            mbox_manager,
-            std::bind(&promise_t<std::pair<int, int> >::pulse, value, ph::_1));
+        auto value = make_scoped<promise_t<std::pair<int, int> > >();
+        auto resp_mbox = make_scoped<mailbox_t<void(std::pair<int, int>)> >(
+                mbox_manager,
+                std::bind(&promise_t<std::pair<int, int> >::pulse, value.get(),
+                          ph::_1));
 
         send(mbox_manager, backfiller->request_progress_mailbox, loc.backfill_session_id, resp_mbox->get_address());
 
-        request_record_t *req_rec = new request_record_t(value, resp_mbox);
+        request_record_t *req_rec = new request_record_t(std::move(value),
+                                                         std::move(resp_mbox));
         (*promise_map)[m_id][n_id][a_id].insert(std::make_pair(region, req_rec));
         things_to_destroy->push_back(req_rec);
     } else {
