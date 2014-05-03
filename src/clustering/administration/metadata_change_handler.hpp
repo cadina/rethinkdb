@@ -16,7 +16,13 @@ template <class metadata_t>
 class metadata_change_handler_t {
 public:
     typedef mailbox_t<void(bool)> result_mailbox_t;
-    typedef mailbox_t<void(bool, metadata_t, typename result_mailbox_t::address_t)> commit_mailbox_t;
+    struct commit_msg_t {
+        bool commit;
+        metadata_t metadata;
+        typename result_mailbox_t::address_t result_mailbox;
+        RDB_MAKE_ME_SERIALIZABLE_3(0, commit, metadata, result_mailbox);
+    };
+    typedef mailbox_t<void(commit_msg_t)> commit_mailbox_t;
     typedef mailbox_t<void(metadata_t, typename commit_mailbox_t::address_t)> ack_mailbox_t;
     typedef mailbox_t<void(typename ack_mailbox_t::address_t)> request_mailbox_t;
 
@@ -75,7 +81,7 @@ public:
         ~metadata_change_request_t() {
             // If a change was never applied, notify the peer that it is no longer needed
             if (interest_acquired) {
-                send(mailbox_manager, commit_mailbox_address, false, metadata_t(), result_mailbox_t::address_t());
+                send(mailbox_manager, commit_mailbox_address, commit_msg_t{false, metadata_t(), result_mailbox_t::address_t()});
             }
         }
 
@@ -90,7 +96,7 @@ public:
                                             std::bind(&promise_t<bool>::pulse,
                                                       &result_promise, ph::_1));
 
-            send(mailbox_manager, commit_mailbox_address, true, metadata, result_mailbox.get_address());
+            send(mailbox_manager, commit_mailbox_address, commit_msg_t{true, metadata, result_mailbox.get_address()});
             disconnect_watcher_t dc_watcher(mailbox_manager->get_connectivity_service(), commit_mailbox_address.get_peer());
             wait_any_t waiter(result_promise.get_ready_signal(), &dc_watcher);
             waiter.wait();
@@ -138,7 +144,7 @@ private:
         cond_t commit_done;
         commit_mailbox_t commit_mailbox(mailbox_manager,
                                         std::bind(&metadata_change_handler_t<metadata_t>::handle_commit,
-                                                  this, &commit_done, &invalid_condition, ph::_1, ph::_2, ph::_3));
+                                                  this, &commit_done, &invalid_condition, ph::_1));
 
         coro_invalid_conditions.insert(&invalid_condition);
 
@@ -153,19 +159,17 @@ private:
 
     void handle_commit(cond_t *done,
                        const cond_t *invalid_condition,
-                       bool commit,
-                       metadata_t metadata,
-                       typename result_mailbox_t::address_t result_mailbox) {
+                       commit_msg_t msg) {
         // The other side may abandon their change request, in which case we do nothing
-        if (commit) {
+        if (msg.commit) {
             bool success = !invalid_condition->is_pulsed();
             if (success) {
-                update(metadata);
+                update(msg.metadata);
             }
             coro_t::spawn_sometime(std::bind(&metadata_change_handler_t::send_result,
                                              this,
                                              success,
-                                             result_mailbox,
+                                             msg.result_mailbox,
                                              auto_drainer_t::lock_t(&drainer)));
         }
         done->pulse();
