@@ -194,7 +194,10 @@ void stat_http_app_t::handle(const http_req_t &req, http_res_t *result, signal_t
         }
         stats_request_record_t *req_record = new stats_request_record_t(mbox_manager);
         stats_promises.insert(machine, req_record);
-        send(mbox_manager, it->second.get_stats_mailbox_address, req_record->response_mailbox.get_address(), filter_paths);
+        send(mbox_manager, it->second.get_stats_mailbox_address,
+             stat_manager_t::get_stats_msg_t{
+                 req_record->response_mailbox.get_address(),
+                 filter_paths});
     }
 
     std::vector<machine_id_t> not_replied;

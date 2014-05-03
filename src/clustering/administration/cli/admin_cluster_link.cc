@@ -1253,8 +1253,9 @@ void admin_cluster_link_t::do_admin_list_stats(const admin_command_parser_t::com
                 found = true;
                 send(&mailbox_manager,
                      j->second.get_stats_mailbox_address,
-                     i->second->response_mailbox.get_address(),
-                     requested_stats);
+                     stat_manager_t::get_stats_msg_t{
+                         i->second->response_mailbox.get_address(),
+                         requested_stats});
             }
         }
 
