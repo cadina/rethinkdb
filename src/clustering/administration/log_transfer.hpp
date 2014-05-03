@@ -5,19 +5,35 @@
 #include <string>
 #include <vector>
 
+#include "containers/archive/boost_types.hpp"
 #include "clustering/administration/logger.hpp"
 #include "clustering/generic/resource.hpp"
 
 class log_server_business_card_t {
 public:
-    typedef mailbox_t<void(boost::variant<std::vector<log_message_t>, std::string>)> result_mailbox_t;
-    typedef mailbox_t<void(int, struct timespec, struct timespec, result_mailbox_t::address_t)> request_mailbox_t;
+    struct result_msg_t {
+        boost::variant<std::vector<log_message_t>, std::string> result;
+        // RSI: Move to .cc file, remove boost_types #include.
+        RDB_MAKE_ME_SERIALIZABLE_1(0, result);
+    };
+    typedef mailbox_t<void(result_msg_t)> result_mailbox_t;
+    struct request_msg_t {
+        int max_lines;
+        struct timespec min_timestamp;
+        struct timespec max_timestamp;
+        result_mailbox_t::address_t cont;
+        RDB_MAKE_ME_SERIALIZABLE_4(0, max_lines, min_timestamp, max_timestamp, cont);
+    };
+
+    typedef mailbox_t<void(request_msg_t)> request_mailbox_t;
 
     log_server_business_card_t() { }
     explicit log_server_business_card_t(const request_mailbox_t::address_t &a) : address(a) { }
 
     request_mailbox_t::address_t address;
 };
+
+typedef log_server_business_card_t log_server_bcard_t;
 
 RDB_DECLARE_SERIALIZABLE(log_server_business_card_t);
 
@@ -28,9 +44,8 @@ public:
     log_server_t(mailbox_manager_t *mm, thread_pool_log_writer_t *w);
     log_server_business_card_t get_business_card();
 private:
-    void handle_request(
-        int max_lines, struct timespec min_timestamp, struct timespec max_timestamp,
-        log_server_business_card_t::result_mailbox_t::address_t cont, auto_drainer_t::lock_t keepalive);
+    void handle_request(log_server_business_card_t::request_msg_t msg,
+                        auto_drainer_t::lock_t keepalive);
     mailbox_manager_t *mailbox_manager;
     thread_pool_log_writer_t *writer;
     auto_drainer_t drainer;
