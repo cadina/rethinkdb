@@ -33,7 +33,11 @@ public:
         RDB_MAKE_ME_SERIALIZABLE_2(0, metadata, commit_mailbox_address);
     };
     typedef mailbox_t<void(ack_msg_t)> ack_mailbox_t;
-    typedef mailbox_t<void(typename ack_mailbox_t::address_t)> request_mailbox_t;
+    struct request_msg_t {
+        typename ack_mailbox_t::address_t ack_mailbox;
+        RDB_MAKE_ME_SERIALIZABLE_1(0, ack_mailbox);
+    };
+    typedef mailbox_t<void(request_msg_t)> request_mailbox_t;
 
     metadata_change_handler_t(mailbox_manager_t *_mailbox_manager,
                               const boost::shared_ptr<semilattice_readwrite_view_t<metadata_t> > &_metadata) :
@@ -78,7 +82,7 @@ public:
                                       std::bind(&metadata_change_handler_t::metadata_change_request_t::handle_ack,
                                                 this, &done, ph::_1));
 
-            send(mailbox_manager, _request_mailbox, ack_mailbox.get_address());
+            send(mailbox_manager, _request_mailbox, request_msg_t{ack_mailbox.get_address()});
             disconnect_watcher_t dc_watcher(mailbox_manager->get_connectivity_service(), _request_mailbox.get_peer());
             wait_any_t waiter(&done, &dc_watcher);
             waiter.wait();
@@ -138,11 +142,11 @@ private:
     std::set<cond_t*> coro_invalid_conditions;
     auto_drainer_t drainer;
 
-    void remote_change_request(typename ack_mailbox_t::address_t ack_mailbox) {
+    void remote_change_request(request_msg_t msg) {
         // Spawn a coroutine to wait for the metadata change
         coro_t::spawn_sometime(std::bind(&metadata_change_handler_t::remote_change_request_coro,
                                          this,
-                                         ack_mailbox,
+                                         msg.ack_mailbox,
                                          auto_drainer_t::lock_t(&drainer)));
     }
 
