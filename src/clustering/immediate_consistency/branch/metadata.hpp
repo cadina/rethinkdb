@@ -114,9 +114,14 @@ struct backfiller_business_card_t {
 
     typedef mailbox_t<void(backfill_session_id_t)> cancel_backfill_mailbox_t;
 
+    struct progress_response_msg_t {
+        // RSI: wtf is this field.
+        std::pair<int, int> wtf_is_this_shit;
+        RDB_MAKE_ME_SERIALIZABLE_1(0, wtf_is_this_shit);
+    };
 
     /* Mailboxes used for requesting the progress of a backfill */
-    typedef mailbox_t<void(backfill_session_id_t, mailbox_addr_t<void(std::pair<int, int>)>)> request_progress_mailbox_t;
+    typedef mailbox_t<void(backfill_session_id_t, mailbox_addr_t<void(progress_response_msg_t)>)> request_progress_mailbox_t;
 
     backfiller_business_card_t() { }
     backfiller_business_card_t(

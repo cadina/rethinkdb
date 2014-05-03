@@ -224,16 +224,18 @@ void backfiller_t::on_cancel_backfill(backfill_session_id_t session_id, UNUSED a
     }
 }
 
+typedef backfiller_business_card_t::progress_response_msg_t progress_response_msg_t;
 
-void backfiller_t::request_backfill_progress(backfill_session_id_t session_id,
-                                             mailbox_addr_t<void(std::pair<int, int>)> response_mbox,
-                                             auto_drainer_t::lock_t) {
+void backfiller_t::request_backfill_progress(
+        backfill_session_id_t session_id,
+        mailbox_addr_t<void(progress_response_msg_t)> response_mbox,
+        auto_drainer_t::lock_t) {
     if (std_contains(local_backfill_progress, session_id) && local_backfill_progress[session_id]) {
         progress_completion_fraction_t fraction = local_backfill_progress[session_id]->guess_completion();
         std::pair<int, int> pair_fraction = std::make_pair(fraction.estimate_of_released_nodes, fraction.estimate_of_total_nodes);
-        send(mailbox_manager, response_mbox, pair_fraction);
+        send(mailbox_manager, response_mbox, progress_response_msg_t{pair_fraction});
     } else {
-        send(mailbox_manager, response_mbox, std::make_pair(-1, -1));
+        send(mailbox_manager, response_mbox, progress_response_msg_t{std::make_pair(-1, -1)});
     }
 
     //TODO indicate an error has occurred

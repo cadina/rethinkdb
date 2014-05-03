@@ -44,9 +44,10 @@ private:
 
     void on_cancel_backfill(backfill_session_id_t session_id, UNUSED auto_drainer_t::lock_t);
 
-    void request_backfill_progress(backfill_session_id_t session_id,
-                                   mailbox_addr_t<void(std::pair<int, int>)> response_mbox,
-                                   auto_drainer_t::lock_t);
+    void request_backfill_progress(
+            backfill_session_id_t session_id,
+            mailbox_addr_t<void(backfiller_business_card_t::progress_response_msg_t)> response_mbox,
+            auto_drainer_t::lock_t);
 
     mailbox_manager_t *const mailbox_manager;
     branch_history_manager_t *const branch_history_manager;

@@ -16,6 +16,7 @@ template <class metadata_t>
 class metadata_change_handler_t {
 public:
     struct result_msg_t {
+        // RSI: What does this field mean?
         bool value;
         RDB_MAKE_ME_SERIALIZABLE_1(0, value);
     };

@@ -20,18 +20,21 @@
 #include "region/region_json_adapter.hpp"
 #include "stl_utils.hpp"
 
+// RSI: Make this const.
 static const char * PROGRESS_REQ_TIMEOUT_PARAM = "timeout";
 static const uint64_t DEFAULT_PROGRESS_REQ_TIMEOUT_MS = 2000;
 static const uint64_t MAX_PROGRESS_REQ_TIMEOUT_MS = 60*1000;
 
+typedef backfiller_business_card_t::progress_response_msg_t progress_response_msg_t;
+
 /* A record of a request made to another peer for progress on a backfill. */
 class request_record_t {
 public:
-    scoped_ptr_t<promise_t<std::pair<int, int> > > promise;
-    scoped_ptr_t<mailbox_t<void(std::pair<int, int>)> > resp_mbox;
+    scoped_ptr_t<promise_t<progress_response_msg_t> > promise;
+    scoped_ptr_t<mailbox_t<void(progress_response_msg_t)> > resp_mbox;
 
-    request_record_t(scoped_ptr_t<promise_t<std::pair<int, int> > > _promise,
-                     scoped_ptr_t<mailbox_t<void(std::pair<int, int>)> > _resp_mbox)
+    request_record_t(scoped_ptr_t<promise_t<progress_response_msg_t> > _promise,
+                     scoped_ptr_t<mailbox_t<void(progress_response_msg_t)> > _resp_mbox)
         : promise(std::move(_promise)), resp_mbox(std::move(_resp_mbox))
     { }
 };
@@ -150,10 +153,10 @@ void send_backfill_requests_t::handle_request_internal(const reactor_business_ca
 
     boost::optional<backfiller_business_card_t> backfiller = boost::apply_visitor(get_backfiller_business_card_t(), region_activity_entry.activity);
     if (backfiller) {
-        auto value = make_scoped<promise_t<std::pair<int, int> > >();
-        auto resp_mbox = make_scoped<mailbox_t<void(std::pair<int, int>)> >(
+        auto value = make_scoped<promise_t<progress_response_msg_t> >();
+        auto resp_mbox = make_scoped<mailbox_t<void(progress_response_msg_t)> >(
                 mbox_manager,
-                std::bind(&promise_t<std::pair<int, int> >::pulse, value.get(),
+                std::bind(&promise_t<progress_response_msg_t>::pulse, value.get(),
                           ph::_1));
 
         send(mbox_manager, backfiller->request_progress_mailbox, loc.backfill_session_id, resp_mbox->get_address());
@@ -371,7 +374,8 @@ void progress_app_t::handle(const http_req_t &req, http_res_t *result, signal_t 
 
                     if (r_it->second->promise->get_ready_signal()->is_pulsed()) {
                         /* The promise is pulsed, we got an answer. */
-                        std::pair<int, int> response = r_it->second->promise->wait();
+                        std::pair<int, int> response
+                            = r_it->second->promise->wait().wtf_is_this_shit;
                         cJSON *pair = cJSON_CreateArray();
                         cJSON_AddItemToArray(pair, cJSON_CreateNumber(response.first));
                         cJSON_AddItemToArray(pair, cJSON_CreateNumber(response.second));
