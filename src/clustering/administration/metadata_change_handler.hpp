@@ -15,7 +15,11 @@
 template <class metadata_t>
 class metadata_change_handler_t {
 public:
-    typedef mailbox_t<void(bool)> result_mailbox_t;
+    struct result_msg_t {
+        bool value;
+        RDB_MAKE_ME_SERIALIZABLE_1(0, value);
+    };
+    typedef mailbox_t<void(result_msg_t)> result_mailbox_t;
     struct commit_msg_t {
         bool commit;
         metadata_t metadata;
@@ -23,7 +27,12 @@ public:
         RDB_MAKE_ME_SERIALIZABLE_3(0, commit, metadata, result_mailbox);
     };
     typedef mailbox_t<void(commit_msg_t)> commit_mailbox_t;
-    typedef mailbox_t<void(metadata_t, typename commit_mailbox_t::address_t)> ack_mailbox_t;
+    struct ack_msg_t {
+        metadata_t metadata;
+        typename commit_mailbox_t::address_t commit_mailbox_address;
+        RDB_MAKE_ME_SERIALIZABLE_2(0, metadata, commit_mailbox_address);
+    };
+    typedef mailbox_t<void(ack_msg_t)> ack_mailbox_t;
     typedef mailbox_t<void(typename ack_mailbox_t::address_t)> request_mailbox_t;
 
     metadata_change_handler_t(mailbox_manager_t *_mailbox_manager,
@@ -67,7 +76,7 @@ public:
             cond_t done;
             ack_mailbox_t ack_mailbox(mailbox_manager,
                                       std::bind(&metadata_change_handler_t::metadata_change_request_t::handle_ack,
-                                                this, &done, ph::_1, ph::_2));
+                                                this, &done, ph::_1));
 
             send(mailbox_manager, _request_mailbox, ack_mailbox.get_address());
             disconnect_watcher_t dc_watcher(mailbox_manager->get_connectivity_service(), _request_mailbox.get_peer());
@@ -81,7 +90,7 @@ public:
         ~metadata_change_request_t() {
             // If a change was never applied, notify the peer that it is no longer needed
             if (interest_acquired) {
-                send(mailbox_manager, commit_mailbox_address, commit_msg_t{false, metadata_t(), result_mailbox_t::address_t()});
+                send(mailbox_manager, commit_mailbox_address, commit_msg_t{false, metadata_t(), typename result_mailbox_t::address_t()});
             }
         }
 
@@ -91,9 +100,9 @@ public:
 
         bool update(const metadata_t &metadata) {
             interest_acquired = false;
-            promise_t<bool> result_promise;
+            promise_t<result_msg_t> result_promise;
             result_mailbox_t result_mailbox(mailbox_manager,
-                                            std::bind(&promise_t<bool>::pulse,
+                                            std::bind(&promise_t<result_msg_t>::pulse,
                                                       &result_promise, ph::_1));
 
             send(mailbox_manager, commit_mailbox_address, commit_msg_t{true, metadata, result_mailbox.get_address()});
@@ -101,19 +110,18 @@ public:
             wait_any_t waiter(result_promise.get_ready_signal(), &dc_watcher);
             waiter.wait();
 
-            bool result;
+            result_msg_t result;
             if (result_promise.try_get_value(&result)) {
-                return result;
+                return result.value;
             }
             return false;
         }
 
     private:
         void handle_ack(cond_t *done,
-                        const metadata_t& metadata,
-                        typename commit_mailbox_t::address_t _commit_mailbox_address) {
-            commit_mailbox_address = _commit_mailbox_address;
-            remote_metadata = metadata;
+                        const ack_msg_t &ack_msg) {
+            commit_mailbox_address = ack_msg.commit_mailbox_address;
+            remote_metadata = ack_msg.metadata;
             done->pulse();
         }
 
@@ -148,7 +156,7 @@ private:
 
         coro_invalid_conditions.insert(&invalid_condition);
 
-        send(mailbox_manager, ack_mailbox, metadata_view->get(), commit_mailbox.get_address());
+        send(mailbox_manager, ack_mailbox, ack_msg_t{metadata_view->get(), commit_mailbox.get_address()});
         disconnect_watcher_t dc_watcher(mailbox_manager->get_connectivity_service(), ack_mailbox.get_peer());
         wait_any_t waiter(&commit_done, &dc_watcher);
         waiter.wait();
@@ -176,7 +184,7 @@ private:
     }
 
     void send_result(bool result, typename result_mailbox_t::address_t result_mailbox, auto_drainer_t::lock_t lock UNUSED) {
-        send<bool>(mailbox_manager, result_mailbox, result);
+        send(mailbox_manager, result_mailbox, result_msg_t{result});
     }
 };
 
