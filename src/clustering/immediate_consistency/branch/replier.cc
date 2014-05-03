@@ -6,8 +6,8 @@
 #include "store_view.hpp"
 
 replier_t::replier_t(listener_t *li,
-                                 mailbox_manager_t *mailbox_manager,
-                                 branch_history_manager_t *branch_history_manager) :
+                     mailbox_manager_t *mailbox_manager,
+                     branch_history_manager_t *branch_history_manager) :
     mailbox_manager_(mailbox_manager),
     listener_(li),
 
